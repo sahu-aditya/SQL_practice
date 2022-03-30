@@ -1,0 +1,134 @@
+/*
+Data exploration of table containing Covid deaths and Vaccination throughout the world
+Possible things we can observe in the data exploaration
+	* Attribute, their significance
+	* Death percentage over total cases, cumulative deaths count and new cases, date of max and min of death and many more
+	* Vaccination percentage over population, cumulative vaccination, observation of death with vaccination and many more
+	* Join the table of vaccination and death to increase the scope of the data exploration on covid
+	* Demonstrate the join,cte,temp table and creating view
+*/
+---------------------------------------------------------------------------------------------------------------------------------
+/*  start with simple
+	see the attribute of both the death and vaccination table by selection only first few row  
+*/
+select top 10 *
+from projects..CovidDeaths
+
+select top 10 *
+from projects..CovidVaccinations
+---------------------------------------------------------------------------------------------------------------------------------
+
+/*
+For starting we can explore attribute like locations, date, new_case, new_deaths, population, vaccination, test
+*/
+
+select location, date,population,new_cases,new_deaths,total_cases
+from projects..CovidDeaths
+order by location
+
+/*
+Calculation of Death percentage over total case */
+select location, date,population,new_cases,new_deaths,total_cases, (new_deaths/total_cases)*100 As death_Percentage
+from projects..CovidDeaths
+order by location
+
+/*
+From above calculation , it is not making sense to calculate death percentage as new_death to total_case, inseated we should use total death over total case */
+select location, date,population,new_cases,new_deaths,total_deaths,total_cases, (total_deaths/total_cases)*100 As death_Percentage
+from projects..CovidDeaths
+order by location
+
+/* lets observe the total cases and death till now and order by country  and then continent*/
+select location,sum(cast(new_cases as int)) As total_case, sum(cast(new_deaths as int)) As toatl_deaths
+from projects..CovidDeaths
+group by location
+order by location
+
+select location,max(cast(new_cases as int)) as Maximum_1day_case, max(cast(total_deaths as int)) as Maximum_1day_death
+from projects..CovidDeaths
+group by location
+order by location
+
+/* if you observe that location also include the continent which should not be present 
+let's for now see the maximum case of death and positivie case
+*/
+select continent,max(cast(new_cases as int)) as Maximum_1day_case, max(cast(new_deaths as int)) as Maximum_1day_death
+from projects..CovidDeaths
+where continent is not null
+group by continent
+order by continent
+
+
+-- Total Population vs Vaccinations
+-- Shows Percentage of Population that has recieved at least one Covid Vaccine
+
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(float,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+-- (RollingPeopleVaccinated/population)*100
+From projects..CovidDeaths dea
+Join projects..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+where dea.continent is not null 
+order by 2,3
+
+
+-- Using CTE to perform Calculation on Partition By in previous query
+
+With PopvsVac (Continent, Location, Date, Population, New_Vaccinations, RollingPeopleVaccinated)
+as
+(
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(float,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+From projects..CovidDeaths dea
+Join projects..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+where dea.continent is not null 
+--order by 2,3
+)
+Select *, (RollingPeopleVaccinated/Population)*100
+From PopvsVac
+
+
+-- Using Temp Table to perform Calculation on Partition By in previous query
+
+DROP Table if exists #PercentPopulationVaccinated
+Create Table #PercentPopulationVaccinated
+(
+Continent nvarchar(255),
+Location nvarchar(255),
+Date datetime,
+Population numeric,
+New_vaccinations numeric,
+RollingPeopleVaccinated numeric
+)
+
+Insert into #PercentPopulationVaccinated
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(float,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+From projects..CovidDeaths dea
+Join projects..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+--where dea.continent is not null 
+--order by 2,3
+
+Select *, (RollingPeopleVaccinated/Population)*100
+From #PercentPopulationVaccinated
+
+
+-- Creating View to store data for later visualizations
+
+Create View PercentPopulationVaccinated 
+as
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(float,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+From projects..CovidDeaths dea
+Join projects..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+where dea.continent is not null 
